@@ -19,6 +19,12 @@ def predict_gpa(model, features):
     return model.predict(X)[0]
 
 # ===========================
+# Helper: GPA Scale (4 → 10)
+# ===========================
+def gpa_4_to_10(gpa_4):
+    return gpa_4 * 2.5
+
+# ===========================
 # Helper: Optimal Study Hours
 # ===========================
 def find_optimal_study_hours(model, base_feature_dict, features_list, 
@@ -45,14 +51,18 @@ def find_optimal_study_hours(model, base_feature_dict, features_list,
 # ===========================
 def plot_optimal_study_hours(hrs, preds, target_gpa, result):
     fig, ax = plt.subplots()
-    ax.plot(hrs, preds, marker='o', color='b', label='Predicted GPA')
+    preds_10 = preds * 2.5
+    ax.plot(hrs, preds_10, marker='o', color='b', label='Predicted GPA (out of 10)')
     if isinstance(result, dict) and result.get('achievable'):
-        ax.axvline(result['required_hours'], color='g', linestyle='--', label=f"Required Hours: {result['required_hours']}")
-        ax.axhline(target_gpa, color='orange', linestyle='--', label=f"Target GPA: {target_gpa}")
+        ax.axvline(result['required_hours'], color='g', linestyle='--',
+                   label=f"Required Hours: {result['required_hours']}")
+        ax.axhline(target_gpa * 2.5, color='orange', linestyle='--',
+                   label=f"Target GPA: {target_gpa * 2.5:.2f}/10")
     else:
-        ax.axvline(result['hours_for_max'], color='r', linestyle='--', label=f"Max GPA at {result['hours_for_max']} hrs")
+        ax.axvline(result['hours_for_max'], color='r', linestyle='--',
+                   label=f"Max GPA at {result['hours_for_max']} hrs")
     ax.set_xlabel("Study Hours per Week")
-    ax.set_ylabel("Predicted GPA")
+    ax.set_ylabel("Predicted GPA (out of 10)")
     ax.set_title("Optimal Study Hours vs Predicted GPA")
     ax.legend()
     ax.grid(True)
@@ -62,11 +72,8 @@ def plot_optimal_study_hours(hrs, preds, target_gpa, result):
 # Helper: KNN Recommendation
 # ===========================
 def recommend_study_pattern(knn_model, input_features, csv_path="student_performance.csv", top_k=3):
-    # Load data from CSV file
     df = pd.read_csv(csv_path)
     data = df.drop(['GradeClass', 'StudentID'], axis=1)
-    
-    # Find nearest neighbors
     distances, indices = knn_model.kneighbors(np.array(input_features).reshape(1, -1), n_neighbors=top_k)
     similar_students = data.iloc[indices[0]]
     return similar_students
@@ -78,17 +85,18 @@ def get_cluster_category(cluster_label):
     if cluster_label == 2:
         return "High Achievers (High GPA, Low Absences)"
     elif cluster_label == 1:
-        return "Moderate-to-Low" \
-        " Performers"
+        return "Moderate-to-Low Performers"
     else:
         return "Struggling Students (Low GPA, High Absences)"
 
 # ===========================
 # Streamlit Navigation
 # ===========================
-st.title("🎓 Student Performance Predictor")
-page = st.radio("Select a Page", 
-                ["🏠 Home", "📈 GPA Prediction", "⏳ Optimal Study Hours", "📚 Study Pattern Recommendation", "🧩 Student Segmentation"])
+st.title("🎓 Student GPA Predictor")
+page = st.radio(
+    "Select a Page",
+    ["🏠 Home", "📈 GPA Prediction", "⏳ Optimal Study Hours", "📚 Study Pattern Recommendation", "🧩 Student Segmentation"]
+)
 
 st.divider()
 
@@ -96,7 +104,7 @@ st.divider()
 # Page 1 - Home
 # ===========================
 if page == "🏠 Home":
-    st.title("🎓 Student Performance Prediction Dashboard")
+    st.title("🎓 Student GPA Prediction Dashboard")
     st.write("Welcome! This app helps predict and analyze student GPA using regression, KNN, and KMeans clustering models.")
     st.markdown("""
     ### Available Features:
@@ -108,20 +116,17 @@ if page == "🏠 Home":
     st.success("Use the navigation above to explore different features.")
 
 # ===========================
-# Input Section (common for all pages except Home)
+# Input Section
 # ===========================
 else:
     st.subheader("📝 Enter Student Information")
-    
-    # Mapping dictionaries
+
     gender_map = {"Male": 0, "Female": 1}
     ethnicity_map = {"Caucasian": 0, "African American": 1, "Asian": 2, "Other": 3}
     parental_edu_map = {"None": 0, "High School": 1, "Some College": 2, "Bachelor's": 3, "Higher": 4}
     parental_support_map = {"None": 0, "Low": 1, "Moderate": 2, "High": 3, "Very High": 4}
     binary_map = {"No": 0, "Yes": 1}
-    
-    # Create 4 columns for grid layout
-    # Row 1
+
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         age = st.number_input("Age", 15, 18, 16)
@@ -134,8 +139,7 @@ else:
     with col4:
         parental_edu_label = st.selectbox("Parental Education", ["None", "High School", "Some College", "Bachelor's", "Higher"])
         parental_edu = parental_edu_map[parental_edu_label]
-    
-    # Row 2
+
     col5, col6, col7, col8 = st.columns(4)
     with col5:
         study_hours = st.slider("Study Time Weekly (hrs)", 0, 20, 8)
@@ -147,8 +151,7 @@ else:
     with col8:
         parental_support_label = st.selectbox("Parental Support", ["None", "Low", "Moderate", "High", "Very High"])
         parental_support = parental_support_map[parental_support_label]
-    
-    # Row 3
+
     col9, col10, col11, col12 = st.columns(4)
     with col9:
         extracurricular_label = st.selectbox("Extracurricular Activities", ["No", "Yes"])
@@ -163,8 +166,10 @@ else:
         volunteering_label = st.selectbox("Volunteering", ["No", "Yes"])
         volunteering = binary_map[volunteering_label]
 
-    input_features = [age, gender, ethnicity, parental_edu, study_hours, absences, tutoring,
-                      parental_support, extracurricular, sports, music, volunteering]
+    input_features = [
+        age, gender, ethnicity, parental_edu, study_hours, absences,
+        tutoring, parental_support, extracurricular, sports, music, volunteering
+    ]
 
     st.divider()
 
@@ -174,15 +179,18 @@ else:
 if page == "📈 GPA Prediction":
     st.title("📈 GPA Prediction")
     if st.button("Predict GPA"):
-        predicted_gpa = predict_gpa(reg_model, input_features)
-        st.success(f"🎯 Predicted GPA: **{predicted_gpa:.2f}**")
+        predicted_gpa_4 = predict_gpa(reg_model, input_features)
+        predicted_gpa_10 = gpa_4_to_10(predicted_gpa_4)
+        st.success(f"🎯 Predicted GPA: **{predicted_gpa_10:.2f} / 10**")
 
 # ===========================
 # Page 3 - Optimal Study Hours
 # ===========================
 elif page == "⏳ Optimal Study Hours":
     st.title("⏳ Find Your Optimal Study Hours")
-    target_gpa = st.number_input("Enter Your Target GPA (2.0 - 4.0)", 2.0, 4.0, 3.5)
+    target_gpa_10 = st.number_input("Enter Your Target GPA (5.0 - 10.0)", 5.0, 10.0, 8.75)
+    target_gpa = target_gpa_10 / 2.5
+
     if st.button("Find Optimal Hours"):
         feature_dict = {
             'Age': age,
@@ -198,12 +206,23 @@ elif page == "⏳ Optimal Study Hours":
             'Music': music,
             'Volunteering': volunteering
         }
-        result, hrs, preds = find_optimal_study_hours(reg_model, feature_dict, list(feature_dict.keys()), target_gpa=target_gpa)
+
+        result, hrs, preds = find_optimal_study_hours(
+            reg_model, feature_dict, list(feature_dict.keys()), target_gpa=target_gpa
+        )
 
         if result.get('achievable'):
-            st.success(f"✅ Target GPA {target_gpa} achievable with ~{result['required_hours']} hrs/week study.")
+            st.success(
+                f"✅ Target GPA {target_gpa_10:.2f}/10 achievable with "
+                f"~{result['required_hours']} hrs/week study."
+            )
         else:
-            st.warning(f"⚠️ Target GPA not achievable. Max Predicted GPA = {result['max_predicted_gpa']:.2f} at {result['hours_for_max']} hrs/week.")
+            st.warning(
+                f"⚠️ Target GPA not achievable. Max Predicted GPA = "
+                f"{gpa_4_to_10(result['max_predicted_gpa']):.2f}/10 "
+                f"at {result['hours_for_max']} hrs/week."
+            )
+
         plot_optimal_study_hours(hrs, preds, target_gpa, result)
 
 # ===========================
